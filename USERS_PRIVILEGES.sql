@@ -150,3 +150,19 @@ BEGIN
     p_TaoTKQuanLy('C##QLN10', '12345');
 END;
 /
+
+--- Xoá nhanh tài khoản
+
+CREATE OR REPLACE PROCEDURE p_XoaTK(
+    p_username IN VARCHAR2
+)
+IS
+BEGIN
+    EXECUTE IMMEDIATE 'DROP USER ' || p_username || ' CASCADE';
+    COMMIT;
+END;
+/
+
+BEGIN
+    p_XoaTK('C##QLN10');
+END;
