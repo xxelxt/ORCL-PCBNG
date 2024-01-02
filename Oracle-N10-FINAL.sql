@@ -1179,11 +1179,11 @@ where extract(month from HD.NgayXuat) = 12 and extract(year from HD.NgayXuat) = 
 group by KH.TaiKhoan, KH.TenKH
 having count(HD.MaHD) >= 2;
 
---- 10. Khách hàng có số dư tài khoản ít hơn 100000
+--- 10. Khách hàng có số dư tài khoản ít hơn 10000
 
 select KH.TaiKhoan, KH.TenKH, KH.SoTienDangCo
 from KhachHang KH
-where KH.SoTienDangCo < 100000
+where KH.SoTienDangCo < 10000
 order by KH.SoTienDangCo desc;
 
 --- 11. Khách hàng có mức chi tiêu trên chi tiêu trung bình
@@ -1259,6 +1259,10 @@ BEGIN
     dbms_output.put_line('Số dư tài khoản ' || v_tk || ' sau khi nạp: ' || v_sodu);
 END;
 /
+
+ALTER INDEX C##ORA.SYS_C008782 REBUILD;
+ALTER INDEX C##ORA.SYS_C008805 REBUILD;
+ALTER INDEX C##ORA.SYS_C008811 REBUILD;
 
 --- 2. Tính doanh thu trong khoảng thời gian nhập từ bàn phím
 
@@ -1629,6 +1633,8 @@ BEGIN
 END;
 /
 
+ALTER INDEX C##ORA.SYS_C008823 REBUILD;
+
 --- 11. Hoàn thành bảo trì và set trạng thái máy hoạt động trở lại
 
 CREATE OR REPLACE FUNCTION f_CapNhatTTSua (
@@ -1728,6 +1734,7 @@ BEGIN
     dbms_output.put_line('Kết quả: ' || v_result);
 END;
 /
+ALTER INDEX C##ORA.SYS_C008751 REBUILD;
 
 --- 13. Nhập đặt chỗ mới
 
@@ -1950,20 +1957,24 @@ ACCEPT v_MaHD CHAR PROMPT 'Nhập mã hoá đơn: ';
 
 DECLARE
     v_result CLOB;
-    v_MaHD VARCHAR2(10) := '&v_MaHD';
+    v_MaHD NVARCHAR2(10) := '&v_MaHD';
 BEGIN
     v_result := f_ChiTietHoaDon(v_MaHD);
     dbms_output.put_line(v_result);
 END;
 /
 
---------------------------
---- USERS & PRIVILEGES ---
---------------------------
+------------------
+--- PRIVILEGES ---
+------------------
+
+GRANT ALL PRIVILEGES TO "C##ORA";
+GRANT DBA TO "C##ORA";
+SELECT * FROM USER_ROLE_PRIVS;
 
 SELECT object_name, object_type
 FROM all_objects
-WHERE object_type IN ('TABLE', 'VIEW', 'FUNCTION', 'PROCEDURE') AND owner = 'C##PCBANG';
+WHERE object_type IN ('TABLE', 'VIEW', 'FUNCTION', 'PROCEDURE') AND owner = 'C##ORA';
 
 --- Admin
 
@@ -1985,15 +1996,15 @@ CREATE USER C##GD IDENTIFIED BY 12345
 GRANT CONNECT, RESOURCE, CREATE SESSION TO C##GD;
 
 BEGIN
-  FOR t IN (SELECT object_name FROM all_objects WHERE object_type = 'TABLE' AND owner = 'C##PCBANG') LOOP
-    EXECUTE IMMEDIATE 'GRANT SELECT, INSERT ON C##PCBANG.' || t.object_name || ' TO C##GD';
+  FOR t IN (SELECT object_name FROM all_objects WHERE object_type = 'TABLE' AND owner = 'C##ORA') LOOP
+    EXECUTE IMMEDIATE 'GRANT SELECT, INSERT ON C##ORA.' || t.object_name || ' TO C##GD';
   END LOOP;
 END;
 /
 
 BEGIN
-  FOR proc IN (SELECT object_name FROM all_objects WHERE object_type IN ('PROCEDURE', 'FUNCTION') AND owner = 'C##PCBANG') LOOP
-    EXECUTE IMMEDIATE 'GRANT EXECUTE ON C##PCBANG.' || proc.object_name || ' TO C##GD';
+  FOR proc IN (SELECT object_name FROM all_objects WHERE object_type IN ('PROCEDURE', 'FUNCTION') AND owner = 'C##ORA') LOOP
+    EXECUTE IMMEDIATE 'GRANT EXECUTE ON C##ORA.' || proc.object_name || ' TO C##GD';
   END LOOP;
 END;
 /
@@ -2033,8 +2044,8 @@ GRANT SELECT ON DVKhac TO C##QuanLy;
 GRANT SELECT ON ThietBi TO C##QuanLy;
 
 BEGIN
-  FOR proc IN (SELECT object_name FROM all_objects WHERE object_type IN ('PROCEDURE', 'FUNCTION') AND owner = 'C##PCBANG') LOOP
-    EXECUTE IMMEDIATE 'GRANT EXECUTE ON C##PCBANG.' || proc.object_name || ' TO C##QuanLy';
+  FOR proc IN (SELECT object_name FROM all_objects WHERE object_type IN ('PROCEDURE', 'FUNCTION') AND owner = 'C##ORA') LOOP
+    EXECUTE IMMEDIATE 'GRANT EXECUTE ON C##ORA.' || proc.object_name || ' TO C##QuanLy';
   END LOOP;
 END;
 /
@@ -2066,8 +2077,8 @@ GRANT SELECT ON DVKhac TO C##NVQuay;
 GRANT SELECT ON ThietBi TO C##NVQuay;
 
 BEGIN
-  FOR proc IN (SELECT object_name FROM all_objects WHERE object_type IN ('PROCEDURE', 'FUNCTION') AND owner = 'C##PCBANG') LOOP
-    EXECUTE IMMEDIATE 'GRANT EXECUTE ON C##PCBANG.' || proc.object_name || ' TO C##NVQuay';
+  FOR proc IN (SELECT object_name FROM all_objects WHERE object_type IN ('PROCEDURE', 'FUNCTION') AND owner = 'C##ORA') LOOP
+    EXECUTE IMMEDIATE 'GRANT EXECUTE ON C##ORA.' || proc.object_name || ' TO C##NVQuay';
   END LOOP;
 END;
 /
@@ -2075,8 +2086,6 @@ END;
 ------------------------
 --- BACKUP & RESTORE ---
 ------------------------
-
---- Execute this in sqlplus as sysdba
 
 sqlplus / as sysdba
 
@@ -2089,11 +2098,58 @@ ALTER DATABASE OPEN;
 
 ALTER DATABASE CLOSE;
 
---- Backup & Restore in RMAN
+-- Backup database cấp 0 (backup toàn bộ cơ sở dữ liệu)
+BACKUP INCREMENTAL LEVEL 0 DATABASE;
+-- Backup database cấp 1 (cấp thấp) (backup toàn bộ những thay đổi so với backup cấp 0)
+BACKUP INCREMENTAL LEVEL 1 DATABASE;
+-- Backup database cấp 1 (cấp cao) (backup toàn bộ những thay đổi so với backup cấp 1)
+BACKUP INCREMENTAL LEVEL 1 CUMULATIVE DATABASE;
 
-BACKUP DATABASE;
-BACKUP DATABASE PLUS ARCHIVELOG;
+-- Backup database cấp 0 cùng Archive Log (backup toàn bộ cơ sở dữ liệu)
+BACKUP INCREMENTAL LEVEL 0 DATABASE PLUS ARCHIVELOG;
+-- Backup database cấp 1 (cấp thấp) cùng Archive Log (backup toàn bộ những thay đổi so với backup cấp 0)
+BACKUP INCREMENTAL LEVEL 1 DATABASE PLUS ARCHIVELOG;
+-- Backup database cấp 1 (cấp cao) cùng Archive Log (backup toàn bộ những thay đổi so với backup cấp 1)
+BACKUP INCREMENTAL LEVEL 1 CUMULATIVE DATABASE PLUS ARCHIVELOG;
+
+-- List các backup
 LIST BACKUP;
+
+-- LƯU Ý: Phải tạo file tên "backup" trong ổ C trước khi chạy script backup định kỳ
+-- LƯU Ý 2: Muốn thay đổi ngày backup định kỳ phải tạo file .bat để thực hiện đoạn script dưới và chỉnh lịch định kỳ trong Task Scheduler
+-- Backup cấp 0 định kỳ vào ngày thứ bảy hàng tuần
+RUN {
+CONFIGURE CHANNEL DEVICE TYPE DISK MAXPIECESIZE 4096 M;
+CONFIGURE CONTROLFILE AUTOBACKUP ON;
+CONFIGURE CONTROLFILE AUTOBACKUP FORMAT FOR DEVICE TYPE DISK TO '/backup/ctl_%F';
+ALLOCATE CHANNEL RMAN_1 DEVICE TYPE DISK; ALLOCATE CHANNEL RMAN_2 DEVICE TYPE DISK;
+ALLOCATE CHANNEL RMAN_3 DEVICE TYPE DISK;
+ALLOCATE CHANNEL RMAN_4 DEVICE TYPE DISK;
+CROSSCHECK ARCHIVELOG ALL;
+CROSSCHECK BACKUP;
+BACKUP AS COMPRESSED BACKUPSET INCREMENTAL LEVEL 0 DATABASE FILESPERSET 4 FORMAT '/backup/db_level0_df%T_s%s_s%p';
+BACKUP AS COMPRESSED BACKUPSET ARCHIVELOG ALL DELETE INPUT FORMAT '/backup/arc_%T_s%s_s%p';
+DELETE NOPROMPT OBSOLETE;
+DELETE NOPROMPT EXPIRED BACKUP;
+DELETE NOPROMPT EXPIRED ARCHIVELOG ALL;
+}
+
+-- Backup cấp 1 vào các ngày còn lại trong tuần
+RUN {
+CONFIGURE CHANNEL DEVICE TYPE DISK MAXPIECESIZE 4096 M;
+CONFIGURE CONTROLFILE AUTOBACKUP ON;
+CONFIGURE CONTROLFILE AUTOBACKUP FORMAT FOR DEVICE TYPE DISK TO '/backup/ctl_%F';
+ALLOCATE CHANNEL RMAN_1 DEVICE TYPE DISK;
+ALLOCATE CHANNEL RMAN_2 DEVICE TYPE DISK;
+ALLOCATE CHANNEL RMAN_3 DEVICE TYPE DISK;
+ALLOCATE CHANNEL RMAN_4 DEVICE TYPE DISK;
+CROSSCHECK ARCHIVELOG ALL; CROSSCHECK BACKUP;
+BACKUP AS COMPRESSED BACKUPSET INCREMENTAL LEVEL 1 DATABASE FILESPERSET 4 FORMAT '/backup/db_level1_df%T_s%s_s%p';
+BACKUP AS COMPRESSED BACKUPSET ARCHIVELOG ALL DELETE INPUT FORMAT '/backup/arc_%T_s%s_s%p';
+DELETE NOPROMPT OBSOLETE;
+DELETE NOPROMPT EXPIRED BACKUP;
+DELETE NOPROMPT EXPIRED ARCHIVELOG ALL;
+}
 
 RESTORE DATABASE VALIDATE;
 RESTORE DATABASE;
